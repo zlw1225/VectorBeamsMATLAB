@@ -36,6 +36,7 @@
 close all
 clear
 %% 1. Beam parameters
+% 1. 光束参数设置：定义高斯光束的基本属性，如传播距离、波长和束腰半径。
 % General Gaussian beam parameters. All the Gaussian modes share the same
 % parameters. You can make each Gaussian beam to have different parameters
 % by changing the z, wavelength and w0 parameters that you send to each
@@ -44,17 +45,22 @@ z = 0; % z coordinate in meters
 wavelength = 633e-9; % wavelength in meters
 w0 = 0.0015; % waist in meters
 %% 2. Polarization basis parameters
+% 2. 偏振基矢参数：定义叠加时使用的偏振基底（如圆偏振、线偏振等）。
 % basisType = 1: Circular basis (Right/Left)
 % basisType = 2: Linear basis (Horizontal/Vertical) - Direct mapping
 % basisType = 3: Linear basis (H/V) + 45 deg Quarter Waveplate (Simulates R/L overlap)
-basisTypeSelection = [1, 2, 3];
+% basisTypeSelection = [1, 2, 3];
+basisTypeSelection = [1,2]; % 这里的 [2] 表示只使用线偏振基底（x, y），这是生成径向偏振最直观的基底。
 
 %% 3. Type of mode addition
+% 3. 模式叠加类型：选择在每个偏振分量上叠加的模式类型（LG模式、HG模式或自定义）。
 %Choose the type of mode at each vector component:
-modesumtype =1;
+%Choose the type of mode at each vector component:
+modesumtype = [1, 2];
 %1. modesumtype =1 -> Laguerre-Gaussian modes sum.
 %2. modesumtype =2 -> Hermite-Gaussian modes sum.
 %3. modesumtype =3 -> Custom mode sum.
+% NOTE: modesumtype array length must match basisTypeSelection array length (1-to-1 mapping)
 %1: Laguerre-Gaussian (LG) modes sum. One LG mode at each vector component
 %mode A:
 % pA = 0; %radial number
@@ -63,10 +69,10 @@ modesumtype =1;
 % pB = 2; %radial number
 % lB = 1; %azimuthal number
 pA = 0; %radial number
-lA = 0; %azimuthal number
+lA = -1; %azimuthal number
 %mode B:
 pB = 0; %radial number
-lB = 0; %azimuthal number
+lB = 1; %azimuthal number
 
 %2: Hermite-Gaussian (HG) modes sum. One HG mode at each vector component.
 %modeA:
@@ -82,7 +88,8 @@ nB = 1;
 %VectorBeam =
 %cos(modeamplitudefactor)*exp(-1i*modephasefactor)*modeA*|polcomponentA> +
 %sin(modeamplitudefactor)* exp(1i*modephasefactor)*modeB*|polcomponentB>
-polcomponentsamplitudefactor =  0; % Amplitude relation between polarization components
+% 设置偏振分量之间的幅度和相位关系
+polcomponentsamplitudefactor =  pi/4; % Amplitude relation between polarization components
 polcomponentsphasefactor =  0; % Phase relation between polarization components
 
 
@@ -92,6 +99,7 @@ polcomponentsphasefactor =  0; % Phase relation between polarization components
 
 
 %% 4. Plot parameters
+% 4. 绘图参数：控制输出图形的显示范围、分辨率和外观。
 
 rangescalingfactor = 1.5; %defines the plot range for the transverse section of the beam.
 %For rangescalingfactor = 1, the plot range is the diameter of the beam 2w,
@@ -165,7 +173,15 @@ hMaster = figure('Name', 'Polarization Maps Comparison (Basis 1, 2, 3)', 'Units'
 for bIdx = 1:length(basisTypeSelection)
     basisType = basisTypeSelection(bIdx);
     
+    % Select corresponding mode type from the array (1-to-1 mapping)
+    if bIdx <= length(modesumtype)
+        currentModeType = modesumtype(bIdx);
+    else
+        currentModeType = modesumtype(end); % Fallback if lengths don't match
+    end
+    
     % Re-assign local polarization vectors base on current basisType
+    % 根据当前的基矢类型重新分配本地偏振向量
     if basisType == 1
         current_polA = (1/sqrt(2)) * [1 1i];
         current_polB = (1/sqrt(2)) * [1 -1i];
@@ -175,23 +191,26 @@ for bIdx = 1:length(basisTypeSelection)
     end
     
     % 1. Calculate Field and Individual Mode Properties
+    % 1. 计算光场和单个模式的属性（如强度和相位）。
     if  plotintensity == true || showmodeproperties == true
         [x,y,X,Y,R,THETA] = Generatepointsinspace(range,resolutionintensityandphase);
-        [modeA,modeB,Jx,Jy] = VectorBeam(X,Y,R,THETA,z,wavelength,w0,pA,pB,lA,lB,mA,mB,nA,nB,modesumtype,polcomponentsamplitudefactor,polcomponentsphasefactor,current_polA,current_polB,basisType);
+        [modeA,modeB,Jx,Jy] = VectorBeam(X,Y,R,THETA,z,wavelength,w0,pA,pB,lA,lB,mA,mB,nA,nB,currentModeType,polcomponentsamplitudefactor,polcomponentsphasefactor,current_polA,current_polB,basisType);
         
         % Original Mode properties (Intensity/Phase of A/B)
         if showmodeproperties == true
-            figure('Name', sprintf('Mode Properties - Basis %d', basisType));
+            figure('Name', sprintf('Mode Properties - Basis %d - ModeType %d', basisType, currentModeType));
             PlotModeIntensityandPhase (range,x,y,X,Y,modeA,modeB,interpolateintensity,numberofpointsinterpolatedintensity)
         end
     end
     
     % 2. Main Polarization Map Plotting (into Subplots)
+    % 2. 绘制偏振分布图（主绘图逻辑，包括强度背景和叠加的偏振椭圆）。
     if plotpolarizationmap == true
         figure(hMaster);
-        subplot(1, 3, bIdx);
+        subplot(1, length(basisTypeSelection), bIdx);
         
         % Plot Intensity background
+        % 绘制强度背景
         if plotintensity == true
             PlotIntensity(range,x,y,X,Y,Jx,Jy,interpolateintensity,numberofpointsinterpolatedintensity)
             colormap bone
@@ -201,7 +220,7 @@ for bIdx = 1:length(basisTypeSelection)
         % Plot Overlaid polarization ellipses
         sizeEllipse = range*sizeEllipsefactor;
         [xPolMap,yPolMap,XPolMap,YPolMap,RPolMap,THETAPolMap] = Generatepointsinspace(range,NEllipses);
-        [~,~,JxPolMap,JyPolMap] = VectorBeam(XPolMap,YPolMap,RPolMap,THETAPolMap,z,wavelength,w0,pA,pB,lA,lB,mA,mB,nA,nB,modesumtype,polcomponentsamplitudefactor,polcomponentsphasefactor,current_polA,current_polB,basisType);
+        [~,~,JxPolMap,JyPolMap] = VectorBeam(XPolMap,YPolMap,RPolMap,THETAPolMap,z,wavelength,w0,pA,pB,lA,lB,mA,mB,nA,nB,currentModeType,polcomponentsamplitudefactor,polcomponentsphasefactor,current_polA,current_polB,basisType);
         
         % Apply Waveplate/Polarizer actions if enabled
         if switchonWaveplate == true
@@ -212,34 +231,36 @@ for bIdx = 1:length(basisTypeSelection)
         end
         
         PlotPolarizationMap(JxPolMap,JyPolMap,NEllipses,range,sizeEllipse,linearthreshold,intensitythresholddrawellipse,ellipselinethickness,linearellipsecolor,righthandedellipsecolor,lefthandedellipsecolor)
-        title(sprintf('Basis Type %d', basisType));
+        title(sprintf('Basis %d - ModeType %d', basisType, currentModeType));
         axis square
         hold off
         
-        % 3. Plot Poincare Sphere for validation (CameraApp verification)
-        % Calculate orientation (psi) and ellipticity (chi) for Poincare coordinates
-        Ex_val = abs(JxPolMap);
-        Ey_val = abs(JyPolMap);
-        delta_val = angle(JxPolMap) - angle(JyPolMap) ;
+        % % 3. Plot Poincare Sphere for validation (CameraApp verification)
+        % % 3. 绘制庞加莱球以验证偏振状态（用于辅助验证CameraApp的结果）。
+        % % Calculate orientation (psi) and ellipticity (chi) for Poincare coordinates
+        % Ex_val = abs(JxPolMap);
+        % Ey_val = abs(JyPolMap);
+        % delta_val = angle(JxPolMap) - angle(JyPolMap) ;
         
-        % Formulas from compute_polarization_ellipses.m logic:
-        % chi (ellipticity angle): 0.5 * asin( 2*Ex*Ey*sin(delta) / (Ex^2 + Ey^2) )
-        % psi (azimuth angle): 0.5 * atan2( 2*Ex*Ey*cos(delta), (Ex^2 - Ey^2) )
-        chi_val = 0.5 * asin( (2 .* Ex_val .* Ey_val .* sin(delta_val)) ./ (Ex_val.^2 + Ey_val.^2 + eps) );
-        psi_val = 0.5 * atan2( 2 .* Ex_val .* Ey_val .* cos(delta_val), (Ex_val.^2 - Ey_val.^2 + eps) );
+        % % Formulas from compute_polarization_ellipses.m logic:
+        % % chi (ellipticity angle): 0.5 * asin( 2*Ex*Ey*sin(delta) / (Ex^2 + Ey^2) )
+        % % psi (azimuth angle): 0.5 * atan2( 2*Ex*Ey*cos(delta), (Ex^2 - Ey^2) )
+        % chi_val = 0.5 * asin( (2 .* Ex_val .* Ey_val .* sin(delta_val)) ./ (Ex_val.^2 + Ey_val.^2 + eps) );
+        % psi_val = 0.5 * atan2( 2 .* Ex_val .* Ey_val .* cos(delta_val), (Ex_val.^2 - Ey_val.^2 + eps) );
         
-        % Filter by intensity to avoid noise in the sphere
-        valid_idx = (Ex_val.^2 + Ey_val.^2) / max(Ex_val(:).^2 + Ey_val(:).^2 + eps) > intensitythresholddrawellipse;
-        if any(valid_idx(:))
-            [x_p, y_p, z_p] = plot_poincare_sphere(chi_val(valid_idx), psi_val(valid_idx));
-            set(gcf, 'Name', sprintf('Poincare Sphere - Basis %d', basisType));
-        end
+        % % Filter by intensity to avoid noise in the sphere
+        % valid_idx = (Ex_val.^2 + Ey_val.^2) / max(Ex_val(:).^2 + Ey_val(:).^2 + eps) > intensitythresholddrawellipse;
+        % if any(valid_idx(:))
+        %     [x_p, y_p, z_p] = plot_poincare_sphere(chi_val(valid_idx), psi_val(valid_idx));
+        %     set(gcf, 'Name', sprintf('Poincare Sphere - Basis %d', basisType));
+        % end
     end
 end
 
 %% Functions
 
 function [x,y,X,Y,R,THETA] = Generatepointsinspace(range,resolution)
+% Generatepointsinspace: 生成空间坐标网格（笛卡尔坐标和极坐标）。
 x = linspace(-range, range,resolution);
 y = linspace(range,-range,resolution);
 [X,Y] = meshgrid(x,y);
@@ -249,6 +270,7 @@ THETA = THETA - 2*pi*floor(THETA/(2*pi));
 end
 
 function PlotIntensity(range,x,y,X,Y,Jx,Jy,interpolate,numberofinterpolationpoints)
+% PlotIntensity: 绘制光束的强度分布图。
 intensity = abs(Jx).^2 + abs(Jy).^2;
 intensitynormalized = intensity/(max(intensity(:)));
 
@@ -274,6 +296,7 @@ end
 
 
 function PlotPolarizationMap(Jx,Jy,NEllipses,range,sizeEllipse,tol,intensitythresholddrawellipse,ellipselinethickness,linearellipsecolor,righthandedellipsecolor,lefthandedellipsecolor)
+% PlotPolarizationMap: 绘制偏振分布图，在强度分布上叠加偏振椭圆。
 jump = 2*range/(NEllipses-1); %distance between ellipses
 modJout = sqrt((abs(Jx).^2)+(abs(Jy).^2));
 
@@ -322,6 +345,7 @@ end %end for loop draw ellipses at columns
 end
 
 function [modeA,modeB,Jx,Jy] = VectorBeam(X,Y,R,THETA,z,wavelength,w0,pA,pB,lA,lB,mA,mB,nA,nB,modetype,polcomponentsamplitudefactor,polcomponentsphasefactor,e1,e2,basisType)
+% VectorBeam函数：根据给定的参数计算两个模式（modeA, modeB）并将它们叠加生成矢量光束的Jones分量（Jx, Jy）。
 % Addition of LG modes
 if modetype == 1
     modeA =  LaguerreGauss(z,wavelength,w0,pA,lA,R,THETA);
@@ -372,6 +396,7 @@ Jy = modee1 * e1(2) + modee2 * e2(2);
 end
 
 function PlotModeIntensityandPhase (range,x,y,X,Y,modeA,modeB,interpolateintensity,numberofpointsinterpolatedintensity)
+% PlotModeIntensityandPhase: 绘制单个模式（Mode A 和 Mode B）的强度和相位分布。
 
 %%Mode A
 %Intensity Mode A
@@ -456,6 +481,7 @@ hold off
 end
 
 function [LaguerreGaussBeam] = LaguerreGauss(z,wavelength,w0,p,l,R,THETA)
+% LaguerreGauss: 计算拉盖尔-高斯（LG）光束的复振幅分布。
 %Returns a complex 2-dimensional matrix. Each element of the matrix contains
 %the amplitude and phase of a Laguerre Gaussian beam at a coordinate (x,y)
 %in space given as a complex number.
@@ -484,6 +510,7 @@ LaguerreGaussBeam = Amplitude.*exp(1i*Phase);
 end
 
 function [HermiteGaussBeam] = HermiteGauss (z,wavelength,w0,m,n,X,Y,R)
+% HermiteGauss: 计算厄米-高斯（HG）光束的复振幅分布。
 %Returns a complex 2-dimensional matrix. Each element of the matrix contains
 %the amplitude and phase of a Hermite Gaussian beam at a coordinate (x,y)
 %in space given as a complex number.
@@ -511,6 +538,7 @@ HermiteGaussBeam = Amplitude.*phase;
 end
 
 function [Joutx,Jouty] = Waveplate(eigenaxesorientation, retardance,Jinx,Jiny)
+% Waveplate: 模拟波片（相位延迟器）对光束偏振态的变换。
 %Returns the ouput polarization state after passing throught a
 %waveplate.
 %Returns 2 complex matrices. One with the |x> component of the Jones vector at each point
@@ -528,6 +556,7 @@ Jouty = cos(eigenaxesorientation) * sin(eigenaxesorientation) * 2 * 1i * sin(ret
 end
 
 function [Joutx,Jouty] = Polarizer(eigenstateorientation, eigenstatephasecomponents,Jx,Jy)
+% Polarizer: 模拟椭圆偏振片对光束偏振态的变换。
 %Returns the ouput polarization state after passing throught a general
 %elliptical polarizer.
 %Returns 2 complex matrices. One with the |x> component of the Jones vector at each point
